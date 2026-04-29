@@ -6,6 +6,19 @@ It polls a configurable sensor source every minute, stores both the raw payload 
 flattened numeric metrics, keeps only the last 72 hours by default, and serves a
 small dashboard on port `35001`.
 
+## Prerequisite
+
+Before using this dashboard, install LiteMonitor first:
+
+- LiteMonitor: <https://github.com/Diorser/LiteMonitor>
+
+After installing it, enable:
+
+- startup on boot
+- the web dashboard / web display
+
+This project depends on LiteMonitor exposing its local web telemetry feed.
+
 ## Why this shape
 
 - `Remix` keeps the web app simple and server-first.

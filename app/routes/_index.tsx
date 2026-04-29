@@ -73,36 +73,48 @@ function metricTone(metric: Pick<DashboardMetric, "key" | "category" | "label">)
   return "other";
 }
 
-function metricStatus(metric: Pick<DashboardMetric, "avg" | "max" | "unit">) {
+function metricSeverity(metric: Pick<DashboardMetric, "key" | "label" | "avg" | "max" | "unit">) {
+  const text = `${metric.key} ${metric.label}`.toLowerCase();
+
   if (metric.unit === "°C") {
-    if (metric.max >= 90) return "bad";
+    if (text.includes("disk") || text.includes("mobo") || text.includes("motherboard")) {
+      if (metric.max >= 70) return "bad";
+      if (metric.max >= 60) return "warn";
+      return "good";
+    }
+
+    if (metric.max >= 85) return "bad";
     if (metric.max >= 75) return "warn";
     return "good";
   }
+
   if (metric.unit === "%") {
-    if (metric.avg >= 92) return "bad";
-    if (metric.avg >= 75) return "warn";
+    const isRiskPercent =
+      text.includes("load") ||
+      text.includes("usage") ||
+      text.includes("vram") ||
+      text.includes("显存") ||
+      text.includes("内存占用") ||
+      text.includes("gpu使用率") ||
+      text.includes("cpu使用率");
+
+    if (!isRiskPercent) return "neutral";
+    if (metric.max >= 95 || metric.avg >= 92) return "bad";
+    if (metric.max >= 85 || metric.avg >= 75) return "warn";
     return "good";
   }
-  return "good";
+
+  return "neutral";
 }
 
-function toneColor(tone: string) {
-  switch (tone) {
-    case "cpu":
+function severityColor(severity: string) {
+  switch (severity) {
+    case "good":
       return "#a6e22e";
-    case "gpu":
-      return "#66d9ef";
-    case "memory":
-      return "#ae81ff";
-    case "disk":
-      return "#e6db74";
-    case "network":
+    case "warn":
       return "#fd971f";
-    case "traffic":
+    case "bad":
       return "#f92672";
-    case "motherboard":
-      return "#78dce8";
     default:
       return "#f8f8f2";
   }
@@ -110,10 +122,10 @@ function toneColor(tone: string) {
 
 function Sparkline({
   points,
-  tone = "other"
+  severity = "neutral"
 }: {
   points: Array<{ recordedAt: string; value: number }>;
-  tone?: string;
+  severity?: string;
 }) {
   if (points.length === 0) {
     return (
@@ -139,8 +151,8 @@ function Sparkline({
     .join(" ");
 
   const area = `${path} L ${width} ${height} L 0 ${height} Z`;
-  const stroke = toneColor(tone);
-  const gradientId = `spark-fill-${tone}-${points.length}`;
+  const stroke = severityColor(severity);
+  const gradientId = `spark-fill-${severity}-${points.length}`;
 
   return (
     <svg className="sparkline" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
@@ -166,9 +178,9 @@ export default function Index() {
   const focusedMetric = dashboard.selectedMetric;
   const modalMetric = metric ? dashboard.metricSummaries.find((item) => item.key === metric) ?? null : null;
   const focusedTone = focusedMetric ? metricTone(focusedMetric) : "other";
-  const focusedStatus = focusedMetric ? metricStatus(focusedMetric) : "good";
+  const focusedSeverity = focusedMetric ? metricSeverity(focusedMetric) : "neutral";
   const modalTone = modalMetric ? metricTone(modalMetric) : "other";
-  const modalStatus = modalMetric ? metricStatus(modalMetric) : "good";
+  const modalSeverity = modalMetric ? metricSeverity(modalMetric) : "neutral";
   const metricQueryHref = (metricKey: string | null) => {
     const params = new URLSearchParams(searchParams);
     if (metricKey) {
@@ -264,16 +276,14 @@ export default function Index() {
                   <button
                     key={entry.label}
                     type="button"
-                    className={`metric-card interactive tone-${entry.metric ? metricTone(entry.metric) : "other"}`}
+                    className={`metric-card interactive tone-${entry.metric ? metricTone(entry.metric) : "other"} severity-${
+                      entry.metric ? metricSeverity(entry.metric) : "neutral"
+                    }`}
                     onClick={() => entry.metric && navigate(metricQueryHref(entry.metric.key))}
                   >
                     <div className="metric-card-top">
                       <div className="label">{entry.label}</div>
-                      {entry.metric ? (
-                        <div className={`metric-badge ${metricStatus(entry.metric)}`}>
-                          {entry.metric.category}
-                        </div>
-                      ) : null}
+                      {entry.metric ? <div className={`metric-badge tone-${metricTone(entry.metric)}`}>{entry.metric.category}</div> : null}
                     </div>
                     <div className="value">
                       {entry.metric ? formatNumber(entry.metric.max, entry.metric.unit) : "n/a"}
@@ -314,7 +324,7 @@ export default function Index() {
                 </p>
               </div>
               {focusedMetric ? (
-                <div className={`pill ${focusedStatus} tone-${focusedTone}`}>
+                <div className={`pill severity-${focusedSeverity}`}>
                   {focusedMetric.category}
                 </div>
               ) : null}
@@ -342,7 +352,7 @@ export default function Index() {
                     </div>
                   </div>
                 </div>
-                <Sparkline points={dashboard.selectedSeries} tone={focusedTone} />
+                <Sparkline points={dashboard.selectedSeries} severity={focusedSeverity} />
               </div>
             ) : (
               <div className="empty">No metric selected because the database has no usable samples yet.</div>
@@ -368,16 +378,24 @@ export default function Index() {
                   <button
                     key={metric.key}
                     type="button"
-                    className={`metric-card interactive tone-${metricTone(metric)}`}
+                    className={`metric-card interactive tone-${metricTone(metric)} severity-${metricSeverity(metric)}`}
                     onClick={() => navigate(metricQueryHref(metric.key))}
                   >
                     <div className="metric-card-top">
                       <div className="label">{metric.label}</div>
-                      <div className={`metric-badge ${metric.status}`}>{metric.category}</div>
+                      <div className={`metric-badge tone-${metricTone(metric)}`}>{metric.category}</div>
                     </div>
                     <div className="value">{formatNumber(metric.max, metric.unit)}</div>
                     <div className="details">
-                      <div>{formatTimestamp(metric.latestAt)}</div>
+                      <div className={`risk-text severity-${metricSeverity(metric)}`}>
+                        {metricSeverity(metric) === "bad"
+                          ? "Error-level signal"
+                          : metricSeverity(metric) === "warn"
+                            ? "Warning-level signal"
+                            : metricSeverity(metric) === "good"
+                              ? "Within target range"
+                              : "Informational metric"}
+                      </div>
                       <div>
                         avg {formatNumber(metric.avg, metric.unit)} • {metric.sampleCount} samples
                       </div>
@@ -426,14 +444,14 @@ export default function Index() {
                           <td className="metric-name">
                             <button
                               type="button"
-                              className={`table-metric-link tone-${metricTone(metric)}`}
+                              className={`table-metric-link tone-${metricTone(metric)} severity-${metricSeverity(metric)}`}
                               onClick={() => navigate(metricQueryHref(metric.key))}
                             >
                               {metric.label}
                             </button>
                           </td>
                           <td>
-                            <span className={`metric-badge ${metricStatus(metric)}`}>{metric.category}</span>
+                            <span className={`metric-badge tone-${metricTone(metric)}`}>{metric.category}</span>
                           </td>
                           <td className="mono">{formatNumber(metric.max, metric.unit)}</td>
                           <td className="mono">{formatNumber(metric.avg, metric.unit)}</td>
@@ -493,7 +511,7 @@ export default function Index() {
       {modalMetric ? (
         <div className="modal-backdrop" onClick={() => navigate(metricQueryHref(null))} role="presentation">
           <section
-            className={`modal-shell tone-${modalTone}`}
+            className={`modal-shell tone-${modalTone} severity-${modalSeverity}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="metric-modal-title"
@@ -510,7 +528,7 @@ export default function Index() {
                 </p>
               </div>
               <div className="modal-actions">
-                <div className={`pill ${modalStatus} tone-${modalTone}`}>{modalMetric.category}</div>
+                <div className={`pill severity-${modalSeverity}`}>{modalMetric.category}</div>
                 <button type="button" className="modal-close" onClick={() => navigate(metricQueryHref(null))}>
                   Close
                 </button>
@@ -519,16 +537,16 @@ export default function Index() {
 
             <div className="modal-grid">
               <div className="trend-shell">
-                <Sparkline points={dashboard.selectedSeries} tone={modalTone} />
+                <Sparkline points={dashboard.selectedSeries} severity={modalSeverity} />
                 <div className="metric-grid compact">
-                  <article className={`metric-card tone-${modalTone}`}>
+                  <article className={`metric-card tone-${modalTone} severity-${modalSeverity}`}>
                     <div className="label">Latest</div>
                     <div className="value">{formatNumber(modalMetric.latestValue, modalMetric.unit)}</div>
                     <div className="details">
                       <div>{formatTimestamp(modalMetric.latestAt)}</div>
                     </div>
                   </article>
-                  <article className={`metric-card tone-${modalTone}`}>
+                  <article className={`metric-card tone-${modalTone} severity-${modalSeverity}`}>
                     <div className="label">Window max</div>
                     <div className="value">{formatNumber(modalMetric.max, modalMetric.unit)}</div>
                     <div className="details">
@@ -539,21 +557,30 @@ export default function Index() {
               </div>
 
               <div className="stack modal-side">
-                <article className={`metric-card tone-${modalTone}`}>
+                <article className={`metric-card tone-${modalTone} severity-${modalSeverity}`}>
                   <div className="label">Profile</div>
                   <div className="details">
                     <div>Average {formatNumber(modalMetric.avg, modalMetric.unit)}</div>
                     <div>{modalMetric.sampleCount} samples in window</div>
                     <div>Key: {modalMetric.key}</div>
+                    <div className={`risk-text severity-${modalSeverity}`}>
+                      {modalSeverity === "bad"
+                        ? "This metric is currently in an error-level range."
+                        : modalSeverity === "warn"
+                          ? "This metric is currently in a warning-level range."
+                          : modalSeverity === "good"
+                            ? "This metric is currently within target range."
+                            : "This metric is informational and not severity-scored."}
+                    </div>
                   </div>
                 </article>
 
-                <article className={`metric-card tone-${modalTone}`}>
+                <article className={`metric-card tone-${modalTone} severity-${modalSeverity}`}>
                   <div className="label">Read</div>
                   <div className="details">
                     <div>
-                      This metric is highlighted because it is one of the more decision-useful
-                      signals in the current hardware feed.
+                      Severity colors now reflect operational risk first. Category identity is only
+                      a secondary cue.
                     </div>
                     <div>
                       Opened from the dashboard so you can inspect thermal, load, network, or

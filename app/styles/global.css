@@ -16,9 +16,9 @@
   --gpu: #66d9ef;
   --memory: #ae81ff;
   --disk: #e6db74;
-  --network: #fd971f;
-  --traffic: #f92672;
-  --motherboard: #78dce8;
+  --network: #78dce8;
+  --traffic: #ff6188;
+  --motherboard: #ab9df2;
   --other: #b4b0a7;
   --radius: 22px;
   --radius-sm: 14px;
@@ -381,40 +381,12 @@ td.metric-name {
   justify-content: center;
   padding: 5px 9px;
   border-radius: 999px;
-  border: 1px solid currentColor;
+  border: 1px solid var(--tone);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-}
-
-.pill.good {
-  color: var(--good);
-  background: rgba(47, 125, 88, 0.08);
-}
-
-.pill.warn {
-  color: var(--warn);
-  background: rgba(169, 94, 33, 0.08);
-}
-
-.pill.bad {
-  color: var(--bad);
-  background: rgba(180, 35, 24, 0.08);
-}
-
-.metric-badge.good {
-  color: var(--good);
-  background: rgba(166, 226, 46, 0.1);
-}
-
-.metric-badge.warn {
-  color: var(--warn);
-  background: rgba(253, 151, 31, 0.11);
-}
-
-.metric-badge.bad {
-  color: var(--bad);
-  background: rgba(249, 38, 114, 0.12);
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
 .tone-cpu {
@@ -449,22 +421,10 @@ td.metric-name {
   --tone: var(--other);
 }
 
-.metric-card[class*="tone-"],
-.pill[class*="tone-"],
-.table-metric-link[class*="tone-"],
-.modal-shell[class*="tone-"] {
-  border-color: color-mix(in srgb, var(--tone) 30%, var(--line));
-}
-
-.metric-card[class*="tone-"] .value,
-.table-metric-link[class*="tone-"] {
-  color: var(--tone);
-}
-
 .metric-card[class*="tone-"] {
   background:
     linear-gradient(180deg, rgba(34, 31, 28, 0.96), rgba(24, 22, 19, 0.98)),
-    radial-gradient(circle at top right, color-mix(in srgb, var(--tone) 14%, transparent), transparent 58%);
+    radial-gradient(circle at top right, color-mix(in srgb, var(--tone) 10%, transparent), transparent 58%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
@@ -480,6 +440,64 @@ td.metric-name {
 .table-metric-link:hover {
   text-decoration: underline;
   text-decoration-color: currentColor;
+}
+
+.severity-good {
+  --severity: var(--good);
+}
+
+.severity-warn {
+  --severity: var(--warn);
+}
+
+.severity-bad {
+  --severity: var(--bad);
+}
+
+.severity-neutral {
+  --severity: rgba(248, 248, 242, 0.68);
+}
+
+.metric-card[class*="severity-"],
+.pill[class*="severity-"],
+.table-metric-link[class*="severity-"],
+.modal-shell[class*="severity-"] {
+  border-color: color-mix(in srgb, var(--severity) 40%, var(--line));
+}
+
+.metric-card[class*="severity-"] .value,
+.table-metric-link[class*="severity-"],
+.risk-text[class*="severity-"] {
+  color: var(--severity);
+}
+
+.metric-card[class*="severity-"] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 0 0 0 1px color-mix(in srgb, var(--severity) 12%, transparent);
+}
+
+.metric-card[class*="severity-"] .label {
+  color: color-mix(in srgb, var(--severity) 45%, var(--muted));
+}
+
+.pill[class*="severity-"] {
+  color: var(--severity);
+  background: color-mix(in srgb, var(--severity) 14%, transparent);
+}
+
+.severity-good.metric-card.interactive:hover,
+.severity-warn.metric-card.interactive:hover,
+.severity-bad.metric-card.interactive:hover,
+.severity-neutral.metric-card.interactive:hover {
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.28),
+    0 0 0 1px color-mix(in srgb, var(--severity) 28%, transparent);
+}
+
+.risk-text {
+  font-size: 12px;
+  letter-spacing: 0.01em;
 }
 
 .modal-backdrop {
