@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Link, useLoaderData, useSearchParams } from "@remix-run/react";
+import { Link, useLoaderData, useNavigate, useSearchParams } from "@remix-run/react";
 
 import { getDashboard } from "../services/analytics.server";
 import { getDatabasePath } from "../services/db.server";
@@ -48,7 +48,73 @@ function formatTimestamp(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
-function Sparkline({ points }: { points: Array<{ recordedAt: string; value: number }> }) {
+type DashboardMetric = {
+  key: string;
+  label: string;
+  category: string;
+  unit: string | null;
+  sampleCount: number;
+  min: number;
+  max: number;
+  avg: number;
+  latestValue: number;
+  latestAt: string;
+};
+
+function metricTone(metric: Pick<DashboardMetric, "key" | "category" | "label">) {
+  const text = `${metric.key} ${metric.category} ${metric.label}`.toLowerCase();
+  if (text.includes("gpu")) return "gpu";
+  if (text.includes("cpu")) return "cpu";
+  if (text.includes("memory") || text.includes("mem.") || text.includes("vram")) return "memory";
+  if (text.includes("disk")) return "disk";
+  if (text.includes("network") || text.includes("net.")) return "network";
+  if (text.includes("traffic") || text.includes("data.")) return "traffic";
+  if (text.includes("motherboard") || text.includes("mobo")) return "motherboard";
+  return "other";
+}
+
+function metricStatus(metric: Pick<DashboardMetric, "avg" | "max" | "unit">) {
+  if (metric.unit === "°C") {
+    if (metric.max >= 90) return "bad";
+    if (metric.max >= 75) return "warn";
+    return "good";
+  }
+  if (metric.unit === "%") {
+    if (metric.avg >= 92) return "bad";
+    if (metric.avg >= 75) return "warn";
+    return "good";
+  }
+  return "good";
+}
+
+function toneColor(tone: string) {
+  switch (tone) {
+    case "cpu":
+      return "#a6e22e";
+    case "gpu":
+      return "#66d9ef";
+    case "memory":
+      return "#ae81ff";
+    case "disk":
+      return "#e6db74";
+    case "network":
+      return "#fd971f";
+    case "traffic":
+      return "#f92672";
+    case "motherboard":
+      return "#78dce8";
+    default:
+      return "#f8f8f2";
+  }
+}
+
+function Sparkline({
+  points,
+  tone = "other"
+}: {
+  points: Array<{ recordedAt: string; value: number }>;
+  tone?: string;
+}) {
   if (points.length === 0) {
     return (
       <div className="sparkline" style={{ display: "grid", placeItems: "center", color: "var(--muted)" }}>
@@ -73,17 +139,19 @@ function Sparkline({ points }: { points: Array<{ recordedAt: string; value: numb
     .join(" ");
 
   const area = `${path} L ${width} ${height} L 0 ${height} Z`;
+  const stroke = toneColor(tone);
+  const gradientId = `spark-fill-${tone}-${points.length}`;
 
   return (
     <svg className="sparkline" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
       <defs>
-        <linearGradient id="fill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="rgba(17,17,17,0.22)" />
-          <stop offset="100%" stopColor="rgba(17,17,17,0.02)" />
+        <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.32" />
+          <stop offset="100%" stopColor={stroke} stopOpacity="0.03" />
         </linearGradient>
       </defs>
-      <path d={area} fill="url(#fill)" />
-      <path d={path} fill="none" stroke="#111111" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={area} fill={`url(#${gradientId})`} />
+      <path d={path} fill="none" stroke={stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -92,9 +160,21 @@ export default function Index() {
   const { dashboard, hours, databasePath, sourceConfigured, pollIntervalMinutes } =
     useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const latest = dashboard.latestSnapshot;
   const selectedMetric = dashboard.selectedMetric;
+  const selectedTone = selectedMetric ? metricTone(selectedMetric) : "other";
+  const selectedStatus = selectedMetric ? metricStatus(selectedMetric) : "good";
+  const metricQueryHref = (metricKey: string | null) => {
+    const params = new URLSearchParams(searchParams);
+    if (metricKey) {
+      params.set("metric", metricKey);
+    } else {
+      params.delete("metric");
+    }
+    return `/?${params.toString()}`;
+  };
 
   return (
     <main className="shell">
@@ -178,8 +258,20 @@ export default function Index() {
             {dashboard.headlineStats.some((entry) => entry.metric) ? (
               <div className="metric-grid">
                 {dashboard.headlineStats.map((entry) => (
-                  <article key={entry.label} className="metric-card">
-                    <div className="label">{entry.label}</div>
+                  <button
+                    key={entry.label}
+                    type="button"
+                    className={`metric-card interactive tone-${entry.metric ? metricTone(entry.metric) : "other"}`}
+                    onClick={() => entry.metric && navigate(metricQueryHref(entry.metric.key))}
+                  >
+                    <div className="metric-card-top">
+                      <div className="label">{entry.label}</div>
+                      {entry.metric ? (
+                        <div className={`metric-badge ${metricStatus(entry.metric)}`}>
+                          {entry.metric.category}
+                        </div>
+                      ) : null}
+                    </div>
                     <div className="value">
                       {entry.metric ? formatNumber(entry.metric.max, entry.metric.unit) : "n/a"}
                     </div>
@@ -196,7 +288,7 @@ export default function Index() {
                         <div>No matching samples in this window.</div>
                       )}
                     </div>
-                  </article>
+                  </button>
                 ))}
               </div>
             ) : (
@@ -219,11 +311,7 @@ export default function Index() {
                 </p>
               </div>
               {selectedMetric ? (
-                <div
-                  className={`pill ${
-                    dashboard.highlightedMetrics.find((metric) => metric.key === selectedMetric.key)?.status ?? "good"
-                  }`}
-                >
+                <div className={`pill ${selectedStatus} tone-${selectedTone}`}>
                   {selectedMetric.category}
                 </div>
               ) : null}
@@ -251,7 +339,7 @@ export default function Index() {
                     </div>
                   </div>
                 </div>
-                <Sparkline points={dashboard.selectedSeries} />
+                <Sparkline points={dashboard.selectedSeries} tone={selectedTone} />
               </div>
             ) : (
               <div className="empty">No metric selected because the database has no usable samples yet.</div>
@@ -274,20 +362,24 @@ export default function Index() {
             {dashboard.highlightedMetrics.length > 0 ? (
               <div className="metric-grid">
                 {dashboard.highlightedMetrics.map((metric) => (
-                  <Link
+                  <button
                     key={metric.key}
-                    to={`/?hours=${hours}&metric=${encodeURIComponent(metric.key)}`}
-                    className="metric-card"
+                    type="button"
+                    className={`metric-card interactive tone-${metricTone(metric)}`}
+                    onClick={() => navigate(metricQueryHref(metric.key))}
                   >
-                    <div className="label">{metric.label}</div>
+                    <div className="metric-card-top">
+                      <div className="label">{metric.label}</div>
+                      <div className={`metric-badge ${metric.status}`}>{metric.category}</div>
+                    </div>
                     <div className="value">{formatNumber(metric.max, metric.unit)}</div>
                     <div className="details">
-                      <div>{metric.category}</div>
+                      <div>{formatTimestamp(metric.latestAt)}</div>
                       <div>
                         avg {formatNumber(metric.avg, metric.unit)} • {metric.sampleCount} samples
                       </div>
                     </div>
-                  </Link>
+                  </button>
                 ))}
               </div>
             ) : (
@@ -328,8 +420,18 @@ export default function Index() {
                       .sort((left, right) => right.max - left.max)
                       .map((metric) => (
                         <tr key={`${metric.key}:${metric.label}`}>
-                          <td className="metric-name">{metric.label}</td>
-                          <td>{metric.category}</td>
+                          <td className="metric-name">
+                            <button
+                              type="button"
+                              className={`table-metric-link tone-${metricTone(metric)}`}
+                              onClick={() => navigate(metricQueryHref(metric.key))}
+                            >
+                              {metric.label}
+                            </button>
+                          </td>
+                          <td>
+                            <span className={`metric-badge ${metricStatus(metric)}`}>{metric.category}</span>
+                          </td>
                           <td className="mono">{formatNumber(metric.max, metric.unit)}</td>
                           <td className="mono">{formatNumber(metric.avg, metric.unit)}</td>
                           <td className="mono">{formatNumber(metric.latestValue, metric.unit)}</td>
@@ -384,6 +486,83 @@ export default function Index() {
           </section>
         </div>
       </div>
+
+      {selectedMetric ? (
+        <div className="modal-backdrop" onClick={() => navigate(metricQueryHref(null))} role="presentation">
+          <section
+            className={`modal-shell tone-${selectedTone}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="metric-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <div className="eyebrow">Metric Detail</div>
+                <h2 id="metric-modal-title" className="modal-title">
+                  {selectedMetric.label}
+                </h2>
+                <p className="section-subtitle">
+                  Expanded view for the selected metric across the last {hours} hours.
+                </p>
+              </div>
+              <div className="modal-actions">
+                <div className={`pill ${selectedStatus} tone-${selectedTone}`}>{selectedMetric.category}</div>
+                <button type="button" className="modal-close" onClick={() => navigate(metricQueryHref(null))}>
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-grid">
+              <div className="trend-shell">
+                <Sparkline points={dashboard.selectedSeries} tone={selectedTone} />
+                <div className="metric-grid compact">
+                  <article className={`metric-card tone-${selectedTone}`}>
+                    <div className="label">Latest</div>
+                    <div className="value">{formatNumber(selectedMetric.latestValue, selectedMetric.unit)}</div>
+                    <div className="details">
+                      <div>{formatTimestamp(selectedMetric.latestAt)}</div>
+                    </div>
+                  </article>
+                  <article className={`metric-card tone-${selectedTone}`}>
+                    <div className="label">Window max</div>
+                    <div className="value">{formatNumber(selectedMetric.max, selectedMetric.unit)}</div>
+                    <div className="details">
+                      <div>min {formatNumber(selectedMetric.min, selectedMetric.unit)}</div>
+                    </div>
+                  </article>
+                </div>
+              </div>
+
+              <div className="stack modal-side">
+                <article className={`metric-card tone-${selectedTone}`}>
+                  <div className="label">Profile</div>
+                  <div className="details">
+                    <div>Average {formatNumber(selectedMetric.avg, selectedMetric.unit)}</div>
+                    <div>{selectedMetric.sampleCount} samples in window</div>
+                    <div>Key: {selectedMetric.key}</div>
+                  </div>
+                </article>
+
+                <article className={`metric-card tone-${selectedTone}`}>
+                  <div className="label">Read</div>
+                  <div className="details">
+                    <div>
+                      This metric is highlighted because it is one of the more decision-useful
+                      signals in the current hardware feed.
+                    </div>
+                    <div>
+                      Opened from the dashboard so you can inspect thermal, load, network, or
+                      traffic behavior without leaving the page.
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
