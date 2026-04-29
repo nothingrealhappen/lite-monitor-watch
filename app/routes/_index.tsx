@@ -157,15 +157,18 @@ function Sparkline({
 }
 
 export default function Index() {
-  const { dashboard, hours, databasePath, sourceConfigured, pollIntervalMinutes } =
+  const { dashboard, hours, metric, databasePath, sourceConfigured, pollIntervalMinutes } =
     useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const latest = dashboard.latestSnapshot;
-  const selectedMetric = dashboard.selectedMetric;
-  const selectedTone = selectedMetric ? metricTone(selectedMetric) : "other";
-  const selectedStatus = selectedMetric ? metricStatus(selectedMetric) : "good";
+  const focusedMetric = dashboard.selectedMetric;
+  const modalMetric = metric ? dashboard.metricSummaries.find((item) => item.key === metric) ?? null : null;
+  const focusedTone = focusedMetric ? metricTone(focusedMetric) : "other";
+  const focusedStatus = focusedMetric ? metricStatus(focusedMetric) : "good";
+  const modalTone = modalMetric ? metricTone(modalMetric) : "other";
+  const modalStatus = modalMetric ? metricStatus(modalMetric) : "good";
   const metricQueryHref = (metricKey: string | null) => {
     const params = new URLSearchParams(searchParams);
     if (metricKey) {
@@ -304,42 +307,42 @@ export default function Index() {
             <div className="section-header">
               <div>
                 <h2 className="section-title">
-                  {selectedMetric ? selectedMetric.label : "Metric trend"}
+                  {focusedMetric ? focusedMetric.label : "Metric trend"}
                 </h2>
                 <p className="section-subtitle">
                   Minute-level history for the currently selected signal.
                 </p>
               </div>
-              {selectedMetric ? (
-                <div className={`pill ${selectedStatus} tone-${selectedTone}`}>
-                  {selectedMetric.category}
+              {focusedMetric ? (
+                <div className={`pill ${focusedStatus} tone-${focusedTone}`}>
+                  {focusedMetric.category}
                 </div>
               ) : null}
             </div>
 
-            {selectedMetric ? (
+            {focusedMetric ? (
               <div className="trend-shell">
                 <div className="trend-summary">
                   <div className="mini-stat">
                     <div className="k">Max</div>
-                    <div className="v">{formatNumber(selectedMetric.max, selectedMetric.unit)}</div>
+                    <div className="v">{formatNumber(focusedMetric.max, focusedMetric.unit)}</div>
                   </div>
                   <div className="mini-stat">
                     <div className="k">Avg</div>
-                    <div className="v">{formatNumber(selectedMetric.avg, selectedMetric.unit)}</div>
+                    <div className="v">{formatNumber(focusedMetric.avg, focusedMetric.unit)}</div>
                   </div>
                   <div className="mini-stat">
                     <div className="k">Min</div>
-                    <div className="v">{formatNumber(selectedMetric.min, selectedMetric.unit)}</div>
+                    <div className="v">{formatNumber(focusedMetric.min, focusedMetric.unit)}</div>
                   </div>
                   <div className="mini-stat">
                     <div className="k">Latest</div>
                     <div className="v">
-                      {formatNumber(selectedMetric.latestValue, selectedMetric.unit)}
+                      {formatNumber(focusedMetric.latestValue, focusedMetric.unit)}
                     </div>
                   </div>
                 </div>
-                <Sparkline points={dashboard.selectedSeries} tone={selectedTone} />
+                <Sparkline points={dashboard.selectedSeries} tone={focusedTone} />
               </div>
             ) : (
               <div className="empty">No metric selected because the database has no usable samples yet.</div>
@@ -487,10 +490,10 @@ export default function Index() {
         </div>
       </div>
 
-      {selectedMetric ? (
+      {modalMetric ? (
         <div className="modal-backdrop" onClick={() => navigate(metricQueryHref(null))} role="presentation">
           <section
-            className={`modal-shell tone-${selectedTone}`}
+            className={`modal-shell tone-${modalTone}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="metric-modal-title"
@@ -500,14 +503,14 @@ export default function Index() {
               <div>
                 <div className="eyebrow">Metric Detail</div>
                 <h2 id="metric-modal-title" className="modal-title">
-                  {selectedMetric.label}
+                  {modalMetric.label}
                 </h2>
                 <p className="section-subtitle">
                   Expanded view for the selected metric across the last {hours} hours.
                 </p>
               </div>
               <div className="modal-actions">
-                <div className={`pill ${selectedStatus} tone-${selectedTone}`}>{selectedMetric.category}</div>
+                <div className={`pill ${modalStatus} tone-${modalTone}`}>{modalMetric.category}</div>
                 <button type="button" className="modal-close" onClick={() => navigate(metricQueryHref(null))}>
                   Close
                 </button>
@@ -516,36 +519,36 @@ export default function Index() {
 
             <div className="modal-grid">
               <div className="trend-shell">
-                <Sparkline points={dashboard.selectedSeries} tone={selectedTone} />
+                <Sparkline points={dashboard.selectedSeries} tone={modalTone} />
                 <div className="metric-grid compact">
-                  <article className={`metric-card tone-${selectedTone}`}>
+                  <article className={`metric-card tone-${modalTone}`}>
                     <div className="label">Latest</div>
-                    <div className="value">{formatNumber(selectedMetric.latestValue, selectedMetric.unit)}</div>
+                    <div className="value">{formatNumber(modalMetric.latestValue, modalMetric.unit)}</div>
                     <div className="details">
-                      <div>{formatTimestamp(selectedMetric.latestAt)}</div>
+                      <div>{formatTimestamp(modalMetric.latestAt)}</div>
                     </div>
                   </article>
-                  <article className={`metric-card tone-${selectedTone}`}>
+                  <article className={`metric-card tone-${modalTone}`}>
                     <div className="label">Window max</div>
-                    <div className="value">{formatNumber(selectedMetric.max, selectedMetric.unit)}</div>
+                    <div className="value">{formatNumber(modalMetric.max, modalMetric.unit)}</div>
                     <div className="details">
-                      <div>min {formatNumber(selectedMetric.min, selectedMetric.unit)}</div>
+                      <div>min {formatNumber(modalMetric.min, modalMetric.unit)}</div>
                     </div>
                   </article>
                 </div>
               </div>
 
               <div className="stack modal-side">
-                <article className={`metric-card tone-${selectedTone}`}>
+                <article className={`metric-card tone-${modalTone}`}>
                   <div className="label">Profile</div>
                   <div className="details">
-                    <div>Average {formatNumber(selectedMetric.avg, selectedMetric.unit)}</div>
-                    <div>{selectedMetric.sampleCount} samples in window</div>
-                    <div>Key: {selectedMetric.key}</div>
+                    <div>Average {formatNumber(modalMetric.avg, modalMetric.unit)}</div>
+                    <div>{modalMetric.sampleCount} samples in window</div>
+                    <div>Key: {modalMetric.key}</div>
                   </div>
                 </article>
 
-                <article className={`metric-card tone-${selectedTone}`}>
+                <article className={`metric-card tone-${modalTone}`}>
                   <div className="label">Read</div>
                   <div className="details">
                     <div>
