@@ -190,6 +190,8 @@ export default function Index() {
     }
     return `/?${params.toString()}`;
   };
+  const openMetricModal = (metricKey: string) => navigate(metricQueryHref(metricKey), { preventScrollReset: true });
+  const closeMetricModal = () => navigate(metricQueryHref(null), { preventScrollReset: true });
 
   return (
     <main className="shell">
@@ -261,6 +263,7 @@ export default function Index() {
                     <Link
                       key={windowHours}
                       className={`button-chip${windowHours === hours ? " active" : ""}`}
+                      preventScrollReset
                       to={`/?${params.toString()}`}
                     >
                       {windowHours}h
@@ -279,7 +282,7 @@ export default function Index() {
                     className={`metric-card interactive tone-${entry.metric ? metricTone(entry.metric) : "other"} severity-${
                       entry.metric ? metricSeverity(entry.metric) : "neutral"
                     }`}
-                    onClick={() => entry.metric && navigate(metricQueryHref(entry.metric.key))}
+                    onClick={() => entry.metric && openMetricModal(entry.metric.key)}
                   >
                     <div className="metric-card-top">
                       <div className="label">{entry.label}</div>
@@ -379,7 +382,7 @@ export default function Index() {
                     key={metric.key}
                     type="button"
                     className={`metric-card interactive tone-${metricTone(metric)} severity-${metricSeverity(metric)}`}
-                    onClick={() => navigate(metricQueryHref(metric.key))}
+                    onClick={() => openMetricModal(metric.key)}
                   >
                     <div className="metric-card-top">
                       <div className="label">{metric.label}</div>
@@ -445,7 +448,7 @@ export default function Index() {
                             <button
                               type="button"
                               className={`table-metric-link tone-${metricTone(metric)} severity-${metricSeverity(metric)}`}
-                              onClick={() => navigate(metricQueryHref(metric.key))}
+                              onClick={() => openMetricModal(metric.key)}
                             >
                               {metric.label}
                             </button>
@@ -509,7 +512,7 @@ export default function Index() {
       </div>
 
       {modalMetric ? (
-        <div className="modal-backdrop" onClick={() => navigate(metricQueryHref(null))} role="presentation">
+        <div className="modal-backdrop" onClick={closeMetricModal} role="presentation">
           <section
             className={`modal-shell tone-${modalTone} severity-${modalSeverity}`}
             role="dialog"
@@ -529,7 +532,7 @@ export default function Index() {
               </div>
               <div className="modal-actions">
                 <div className={`pill severity-${modalSeverity}`}>{modalMetric.category}</div>
-                <button type="button" className="modal-close" onClick={() => navigate(metricQueryHref(null))}>
+                <button type="button" className="modal-close" onClick={closeMetricModal}>
                   Close
                 </button>
               </div>
