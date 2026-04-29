@@ -11,6 +11,25 @@ type CollectResult = {
   note?: string;
 };
 
+type SnapshotApiResponse = {
+  sys?: {
+    ip?: string;
+    port?: number;
+    uptime?: string;
+  };
+  items?: Array<{
+    k?: string;
+    n?: string;
+    gid?: string;
+    gn?: string;
+    v?: string | number;
+    u?: string;
+    pct?: number;
+    sts?: number;
+    primary?: boolean;
+  }>;
+};
+
 function normalizeMetricKey(parts: string[]) {
   return parts
     .join(".")
@@ -22,6 +41,11 @@ function normalizeMetricKey(parts: string[]) {
 
 function toCategory(key: string, label: string) {
   const text = `${key} ${label}`.toLowerCase();
+  if (text.includes("net.") || text.includes("upload") || text.includes("download")) return "network";
+  if (text.includes("data.") || text.includes("流量")) return "traffic";
+  if (text.includes("disk.") || text.includes("磁盘")) return "disk";
+  if (text.includes("mobo.") || text.includes("主板")) return "motherboard";
+  if (text.includes("mem.") || text.includes("内存") || text.includes("vram")) return "memory";
   if (text.includes("gpu")) return "gpu";
   if (text.includes("cpu")) return "cpu";
   if (text.includes("temp") || text.includes("temperature") || text.includes("℃") || text.includes("°c")) {
@@ -60,6 +84,51 @@ function parseMetricValue(value: unknown) {
     rawValue: trimmed,
     unit: match[2] ? match[2].replace("℃", "°C") : null
   };
+}
+
+function extractFromSnapshotApi(payload: SnapshotApiResponse) {
+  const samples: MetricSampleInput[] = [];
+
+  for (const item of payload.items ?? []) {
+    if (!item.k || !item.n) continue;
+    const parsed = parseMetricValue(item.v);
+    if (!parsed) continue;
+
+    const labelParts = [item.gn, item.n].filter(Boolean);
+    const label = labelParts.join(" / ");
+    samples.push({
+      key: item.k,
+      label,
+      category: toCategory(item.k, `${item.gid ?? ""} ${item.gn ?? ""} ${item.n}`),
+      unit: item.u?.trim() || parsed.unit,
+      value: parsed.numericValue,
+      rawValue: parsed.rawValue
+    });
+
+    if (typeof item.pct === "number" && Number.isFinite(item.pct)) {
+      samples.push({
+        key: `${item.k}.pct`,
+        label: `${label} / Percent`,
+        category: "derived",
+        unit: "%",
+        value: item.pct,
+        rawValue: String(item.pct)
+      });
+    }
+
+    if (typeof item.sts === "number" && Number.isFinite(item.sts)) {
+      samples.push({
+        key: `${item.k}.status`,
+        label: `${label} / Status`,
+        category: "derived",
+        unit: null,
+        value: item.sts,
+        rawValue: String(item.sts)
+      });
+    }
+  }
+
+  return samples;
 }
 
 function extractFromJson(input: unknown, path: string[] = [], samples: MetricSampleInput[] = []): MetricSampleInput[] {
@@ -223,11 +292,22 @@ export async function collectAndStoreSnapshot(): Promise<CollectResult> {
   }
 
   try {
-    const response = await fetch(sourceUrl, {
+    const apiUrl = new URL(sourceUrl);
+    apiUrl.pathname = apiUrl.pathname.replace(/\/$/, "") + "/api/snapshot";
+
+    let response = await fetch(apiUrl, {
       headers: {
         "user-agent": "lite-monitor-watch/0.1"
       }
     });
+
+    if (!response.ok) {
+      response = await fetch(sourceUrl, {
+        headers: {
+          "user-agent": "lite-monitor-watch/0.1"
+        }
+      });
+    }
 
     const contentType = response.headers.get("content-type");
     const body = await response.text();
@@ -239,7 +319,12 @@ export async function collectAndStoreSnapshot(): Promise<CollectResult> {
       note = `Source responded with ${response.status}`;
     } else if (contentType?.includes("json")) {
       try {
-        samples = dedupeMetrics(extractFromJson(JSON.parse(body), ["root"]));
+        const parsedPayload = JSON.parse(body) as SnapshotApiResponse;
+        if (Array.isArray(parsedPayload.items)) {
+          samples = dedupeMetrics(extractFromSnapshotApi(parsedPayload));
+        } else {
+          samples = dedupeMetrics(extractFromJson(parsedPayload, ["root"]));
+        }
       } catch (error) {
         note = `Failed to parse JSON: ${String(error)}`;
       }
@@ -254,7 +339,7 @@ export async function collectAndStoreSnapshot(): Promise<CollectResult> {
 
     insertSnapshot({
       recordedAt,
-      sourceUrl,
+      sourceUrl: response.url,
       contentType,
       rawPayload: body,
       note,

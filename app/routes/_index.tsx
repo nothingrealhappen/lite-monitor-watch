@@ -105,7 +105,8 @@ export default function Index() {
           <p className="hero-copy">
             This dashboard stores snapshots from a configurable sensor source every minute, keeps
             only the rolling last three days in SQLite, and surfaces the signals that matter over
-            time: thermal peaks, GPU pressure, load averages, fan behavior, and stability gaps.
+            time: CPU and GPU temperatures, memory pressure, disk heat, burst bandwidth, and daily
+            transfer totals.
           </p>
           <div className="hero-meta">
             <div className="chip">Window: last {hours} hours</div>
@@ -128,7 +129,8 @@ export default function Index() {
             <div className="label">Source status</div>
             <div className="value">{sourceConfigured ? "Configured" : "Missing URL"}</div>
             <div className="subvalue">
-              {latest?.note ?? "The collector writes raw payloads and parsed metrics into SQLite."}
+              {latest?.note ??
+                "The collector prefers /api/snapshot and stores both raw payloads and normalized metrics."}
             </div>
           </div>
 
@@ -152,8 +154,8 @@ export default function Index() {
               <div>
                 <h2 className="section-title">Window summary</h2>
                 <p className="section-subtitle">
-                  The dashboard prioritizes metrics that are most actionable over time: thermal
-                  peaks, GPU saturation, sustained load, fan response, and power drift.
+                  Summary cards are tuned for the real hardware feed: CPU and GPU thermals, memory
+                  load, disk temperature, live download rate, and today&apos;s transfer total.
                 </p>
               </div>
               <div className="button-row">
@@ -217,7 +219,11 @@ export default function Index() {
                 </p>
               </div>
               {selectedMetric ? (
-                <div className={`pill ${dashboard.highlightedMetrics[0]?.status ?? "good"}`}>
+                <div
+                  className={`pill ${
+                    dashboard.highlightedMetrics.find((metric) => metric.key === selectedMetric.key)?.status ?? "good"
+                  }`}
+                >
                   {selectedMetric.category}
                 </div>
               ) : null}
@@ -259,8 +265,8 @@ export default function Index() {
               <div>
                 <h2 className="section-title">Priority metrics</h2>
                 <p className="section-subtitle">
-                  Pick a signal to inspect. Ranking favors CPU/GPU temperatures, hotspot readings,
-                  sustained load, fan speeds, and power.
+                  Pick a signal to inspect. Ranking favors CPU/GPU temperatures, memory pressure,
+                  disk temperature, network throughput, and daily traffic counters.
                 </p>
               </div>
             </div>
@@ -286,8 +292,8 @@ export default function Index() {
               </div>
             ) : (
               <div className="empty">
-                Nothing ranked yet. The collector is ready, but it still needs reachable source
-                data to build a meaningful metric shortlist.
+                Nothing ranked yet. The collector is ready, but it still needs reachable snapshot
+                data to build a meaningful shortlist.
               </div>
             )}
           </section>
@@ -297,7 +303,8 @@ export default function Index() {
               <div>
                 <h2 className="section-title">All metrics</h2>
                 <p className="section-subtitle">
-                  Everything parsed into time-series rows over the current window.
+                  All normalized sensor values over the current window, with derived status fields
+                  intentionally hidden from the main view.
                 </p>
               </div>
             </div>

@@ -16,7 +16,6 @@ ENV PORT=35001
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
 COPY --from=build /app/app ./app
-COPY --from=build /app/public ./public
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/scripts ./scripts
 RUN mkdir -p /app/data

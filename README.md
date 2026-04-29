@@ -35,7 +35,7 @@ cp .env.example .env
 
 | Variable | Default | Purpose |
 |---|---:|---|
-| `MONITOR_SOURCE_URL` | none | Sensor source URL, for example `http://win:35000/` |
+| `MONITOR_SOURCE_URL` | none | Sensor source URL, for example `http://100.88.178.2:35000/` |
 | `PORT` | `35001` | Dashboard port |
 | `DATABASE_PATH` | `./data/monitor.sqlite` | SQLite database location |
 | `POLL_INTERVAL_MS` | `60000` | Poll every minute by default |
@@ -74,34 +74,54 @@ Run:
 ```bash
 docker run --rm \
   -p 35001:35001 \
-  -e MONITOR_SOURCE_URL=http://win:35000/ \
+  -e MONITOR_SOURCE_URL=http://100.88.178.2:35000/ \
   -e PORT=35001 \
   -e DATABASE_PATH=/app/data/monitor.sqlite \
   -v "$(pwd)/data:/app/data" \
   lite-monitor-watch
 ```
 
+For a long-running local deployment with auto-restart:
+
+```bash
+docker compose up -d --build
+```
+
+The compose file defaults `MONITOR_SOURCE_URL` to `http://100.88.178.2:35000/`
+but still allows overriding it through the shell environment.
+
 ## Current parser behavior
 
-The collector supports:
+The collector prefers the source's `/api/snapshot` JSON endpoint and falls back to HTML parsing if
+that API is unavailable.
+
+It currently recognizes the real feed's main metric families:
+
+- CPU: load, temp, clock, power, voltage, fan, pump
+- GPU: load, temp, clock, power, fan, VRAM
+- Host: memory load, FPS, disk temp, motherboard temp, case fan
+- Disk: read/write throughput
+- Network: up/down throughput
+- Daily totals: today's upload/download
+
+The fallback parser still supports:
 
 - direct JSON payloads
 - JSON embedded in `<script type="application/json">`
 - table-based HTML dashboards where rows contain sensor names and value columns
 - numeric strings like `47 °C`, `68 %`, `1750 RPM`, `224 W`
 
-The parser ranks dashboard metrics by usefulness over time:
+The dashboard prioritizes the most decision-useful metrics over time:
 
 1. CPU and GPU temperatures
-2. hotspot / peak thermal readings
-3. sustained load percentages
-4. fan RPM behavior
-5. power draw
-6. clocks and memory signals
+2. memory pressure and VRAM usage
+3. disk / motherboard thermal readings
+4. network bursts and daily transfer totals
+5. sustained load and power behavior
 
 ## Notes
 
 - If the source host is unreachable, the app still records the failure in `snapshots.note`.
 - The dashboard defaults to the last `72` hours and supports shorter windows.
-- The current environment where this repo was bootstrapped could not reach `http://win:35000/`,
-  so the parser was designed defensively to handle multiple source shapes once the source becomes reachable.
+- In the current environment, the host shell could not reach the monitor URL directly, but the
+  Docker container could, so `docker compose up -d --build` is the recommended local deployment path.

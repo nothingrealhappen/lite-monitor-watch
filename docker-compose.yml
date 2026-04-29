@@ -1,0 +1,17 @@
+services:
+  lite-monitor-watch:
+    container_name: lite-monitor-watch
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "35001:35001"
+    environment:
+      PORT: "35001"
+      DATABASE_PATH: /app/data/monitor.sqlite
+      POLL_INTERVAL_MS: "60000"
+      RETENTION_HOURS: "72"
+      MONITOR_SOURCE_URL: ${MONITOR_SOURCE_URL:-http://100.88.178.2:35000/}
+    volumes:
+      - ./data:/app/data

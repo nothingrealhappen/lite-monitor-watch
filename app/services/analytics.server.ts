@@ -18,20 +18,51 @@ export type MetricPoint = {
   value: number;
 };
 
+function metricText(summary: MetricSummary) {
+  return `${summary.key} ${summary.label}`.toLowerCase();
+}
+
+function isDerivedMetric(summary: MetricSummary) {
+  return summary.category === "derived" || summary.key.endsWith(".pct") || summary.key.endsWith(".status");
+}
+
+function isVisibleMetric(summary: MetricSummary) {
+  if (isDerivedMetric(summary)) return false;
+  if (summary.key.startsWith("DASH.")) return false;
+  return true;
+}
+
 function metricPriority(summary: MetricSummary) {
-  const text = `${summary.key} ${summary.label}`.toLowerCase();
+  const text = metricText(summary);
   let priority = 0;
-  if (text.includes("cpu package")) priority += 90;
-  if (text.includes("gpu core") || text.includes("gpu temp")) priority += 88;
-  if (text.includes("hotspot")) priority += 86;
-  if (summary.category === "temperature") priority += 70;
-  if (summary.category === "gpu") priority += 65;
-  if (summary.category === "cpu") priority += 60;
-  if (summary.category === "fan") priority += 45;
-  if (summary.category === "power") priority += 42;
-  if (summary.category === "load") priority += 38;
+  if (text.includes("cpu.temp")) priority += 96;
+  if (text.includes("gpu.temp")) priority += 94;
+  if (text.includes("mem.load")) priority += 90;
+  if (text.includes("disk.temp")) priority += 82;
+  if (text.includes("mobo.temp")) priority += 80;
+  if (text.includes("gpu.vram")) priority += 76;
+  if (text.includes("cpu.load")) priority += 74;
+  if (text.includes("gpu.load")) priority += 72;
+  if (text.includes("net.down")) priority += 66;
+  if (text.includes("net.up")) priority += 64;
+  if (text.includes("data.daydown")) priority += 58;
+  if (text.includes("data.dayup")) priority += 56;
+  if (text.includes("cpu package")) priority += 54;
+  if (text.includes("gpu core") || text.includes("gpu temp")) priority += 52;
+  if (text.includes("hotspot")) priority += 50;
+  if (summary.category === "temperature") priority += 42;
+  if (summary.category === "gpu") priority += 36;
+  if (summary.category === "cpu") priority += 32;
+  if (summary.category === "memory") priority += 30;
+  if (summary.category === "disk") priority += 22;
+  if (summary.category === "network") priority += 20;
+  if (summary.category === "traffic") priority += 18;
+  if (summary.category === "fan") priority += 16;
+  if (summary.category === "power") priority += 14;
+  if (summary.category === "load") priority += 12;
   if (summary.unit === "°C") priority += 20;
-  if (summary.unit === "%") priority += 6;
+  if (summary.unit === "%") priority += 10;
+  if (summary.unit === "KB/s" || summary.unit === "MB/s") priority += 8;
   return priority + summary.sampleCount / 100;
 }
 
@@ -133,7 +164,8 @@ export function getRecentFailures(hours: number) {
 export function getDashboard(hours: number, preferredMetricKey?: string | null) {
   const latestSnapshot = getLatestSnapshot();
   const metricSummaries = getMetricSummaries(hours);
-  const highlightedMetrics = [...metricSummaries]
+  const visibleMetrics = metricSummaries.filter(isVisibleMetric);
+  const highlightedMetrics = [...visibleMetrics]
     .sort((left, right) => metricPriority(right) - metricPriority(left))
     .slice(0, 8)
     .map((summary) => ({
@@ -142,45 +174,48 @@ export function getDashboard(hours: number, preferredMetricKey?: string | null) 
     }));
 
   const selectedMetric =
-    metricSummaries.find((item) => item.key === preferredMetricKey) ??
+    visibleMetrics.find((item) => item.key === preferredMetricKey) ??
     highlightedMetrics[0] ??
     null;
 
   const selectedSeries = selectedMetric ? getMetricSeries(selectedMetric.key, hours) : [];
   const failures = getRecentFailures(hours);
 
-  const hottestToday = [...metricSummaries]
-    .filter((metric) => metric.unit === "°C")
-    .sort((left, right) => right.max - left.max)[0];
-
-  const gpuPeak = [...metricSummaries]
-    .filter((metric) => metric.category === "gpu" || metric.label.toLowerCase().includes("gpu"))
-    .sort((left, right) => right.max - left.max)[0];
-
-  const loadAverage =
-    [...metricSummaries]
-      .filter((metric) => metric.unit === "%" || metric.category === "load")
-      .sort((left, right) => metricPriority(right) - metricPriority(left))[0] ?? null;
+  const pickMetric = (matcher: (metric: MetricSummary) => boolean) =>
+    [...visibleMetrics].filter(matcher).sort((left, right) => metricPriority(right) - metricPriority(left))[0] ??
+    null;
 
   return {
     latestSnapshot,
-    metricSummaries,
+    metricSummaries: visibleMetrics,
     highlightedMetrics,
     selectedMetric,
     selectedSeries,
     failures,
     headlineStats: [
       {
-        label: "Today's hottest metric",
-        metric: hottestToday
+        label: "CPU peak temp",
+        metric: pickMetric((metric) => metricText(metric).includes("cpu.temp"))
       },
       {
-        label: "GPU peak",
-        metric: gpuPeak
+        label: "GPU peak temp",
+        metric: pickMetric((metric) => metricText(metric).includes("gpu.temp"))
       },
       {
-        label: "Average active load",
-        metric: loadAverage
+        label: "Memory peak load",
+        metric: pickMetric((metric) => metricText(metric).includes("mem.load"))
+      },
+      {
+        label: "Disk peak temp",
+        metric: pickMetric((metric) => metricText(metric).includes("disk.temp"))
+      },
+      {
+        label: "Download burst",
+        metric: pickMetric((metric) => metricText(metric).includes("net.down"))
+      },
+      {
+        label: "Today's total download",
+        metric: pickMetric((metric) => metricText(metric).includes("data.daydown"))
       }
     ]
   };
