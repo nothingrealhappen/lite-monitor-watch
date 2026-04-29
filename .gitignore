@@ -1,0 +1,10 @@
+node_modules
+.cache
+.vite
+build
+coverage
+.DS_Store
+data
+*.sqlite
+*.sqlite-*
+.env
